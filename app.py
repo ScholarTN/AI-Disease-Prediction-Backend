@@ -15,6 +15,11 @@ from report_generator import generate_pdf
 from io import StringIO
 from suggestions import generate_suggestion
 
+from datetime import datetime
+import csv
+from io import StringIO
+from functools import wraps
+
 app = Flask(__name__)
 # Enhanced CORS configuration to allow requests from the frontend
 # In your Flask app.py
@@ -31,6 +36,28 @@ predictions_collection = db["predictions"]
 
 # Load trained model
 model = joblib.load("diabetes_model.pkl")  # Simplified path
+
+# Add token verification decorator
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # Check both headers and query params for token
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]  # Bearer <token>
+        elif 'token' in request.args:
+            token = request.args.get('token')
+            
+        if not token:
+            return jsonify({"status": "error", "message": "Token is missing"}), 401
+            
+        user = users_collection.find_one({"token": token})
+        if not user:
+            return jsonify({"status": "error", "message": "Invalid token"}), 403
+            
+        return f(user, *args, **kwargs)
+    return decorated
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -222,25 +249,20 @@ def predict():
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route("/logs", methods=["GET"])
-def logs():
-    token = request.args.get("token")
-    user = users_collection.find_one({"token": token})
-
-    if not user:
-        return jsonify({"status": "error", "message": "Invalid token"}), 403
-
+@token_required
+def logs(current_user):
     user_logs = list(predictions_collection.find(
-        {"email": user["email"]},
+        {"email": current_user["email"]},
         {"_id": 0, "email": 0}
     ).sort("timestamp", -1).limit(10))
 
     return jsonify({"status": "success", "logs": user_logs})
 
 @app.route("/all-records", methods=["GET"])
-def all_records():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+@token_required
+def all_records(current_user):
+    if current_user["role"] != "doctor":
+        return jsonify({"status": "error", "message": "Doctor access required"}), 403
 
     records = list(predictions_collection.find(
         {},
@@ -250,10 +272,10 @@ def all_records():
     return jsonify({"status": "success", "records": records})
 
 @app.route("/admin-summary", methods=["GET"])
-def admin_summarry():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+@token_required
+def admin_summary(current_user):
+    if current_user["role"] != "doctor":
+        return jsonify({"status": "error", "message": "Doctor access required"}), 403
 
     total_users = users_collection.count_documents({})
     total_predictions = predictions_collection.count_documents({})
@@ -272,40 +294,32 @@ def admin_summarry():
 
 
 @app.route("/download", methods=["GET"])
-def download():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+@token_required
+def download(current_user):
+    if current_user["role"] != "doctor":
+        return jsonify({"status": "error", "message": "Doctor access required"}), 403
 
+    report_type = request.args.get("type", "csv").lower()
+    
     try:
-        # Define our expected output fields and defaults
         output_fields = [
             'email', 'age', 'bmi', 'glucose', 'blood_pressure',
             'family_history', 'gender', 'prediction', 'suggestion', 'timestamp'
         ]
         
-        # Get raw records from MongoDB
         raw_records = list(predictions_collection.find({}, {"_id": 0}))
         
         if not raw_records:
             return jsonify({"status": "error", "message": "No records found"}), 404
 
         if report_type == "csv":
-            # Process each record to include only our desired fields
             processed_records = []
             for record in raw_records:
-                # Create new record with only the fields we want
-                clean_record = {
-                    field: record.get(field, None)  # Returns None if field doesn't exist
-                    for field in output_fields
-                }
-                
-                # Convert special fields
+                clean_record = {field: record.get(field, None) for field in output_fields}
                 clean_record['family_history'] = 'Yes' if clean_record.get('family_history') else 'No'
                 clean_record['gender'] = 'Male' if clean_record.get('gender') == 1 else 'Female'
                 clean_record['prediction'] = 'High Risk' if clean_record.get('prediction') == 1 else 'Low Risk'
                 
-                # Format timestamp
                 if isinstance(clean_record.get('timestamp'), datetime):
                     clean_record['timestamp'] = clean_record['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
                 elif clean_record.get('timestamp') is None:
@@ -313,30 +327,28 @@ def download():
                 
                 processed_records.append(clean_record)
 
-            # Generate CSV
             output = StringIO()
             writer = csv.DictWriter(output, fieldnames=output_fields)
-            
             writer.writeheader()
             writer.writerows(processed_records)
             
             response = make_response(output.getvalue())
-            response.headers["Content-Disposition"] = "attachment; filename=diabetes_records.csv"
+            response.headers["Content-Disposition"] = f"attachment; filename=diabetes_records.csv"
             response.headers["Content-type"] = "text/csv"
             return response
 
         elif report_type == "pdf":
             pdf_bytes = generate_pdf(raw_records)
             response = make_response(pdf_bytes)
-            response.headers["Content-Disposition"] = "attachment; filename=diabetes_records.pdf"
+            response.headers["Content-Disposition"] = f"attachment; filename=diabetes_records.pdf"
             response.headers["Content-type"] = "application/pdf"
             return response
+
+        return jsonify({"status": "error", "message": "Invalid report type"}), 400
 
     except Exception as e:
         app.logger.error(f"Report generation failed: {str(e)}")
         return jsonify({"status": "error", "message": f"Report generation failed: {str(e)}"}), 500
-
-    return jsonify({"status": "error", "message": "Invalid report type"}), 400
 
 if __name__ == "__main__":
     if not os.path.exists("reports"):
