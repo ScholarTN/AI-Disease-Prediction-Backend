@@ -27,6 +27,10 @@ CORS(app, resources={
         "supports_credentials": True
     }
 })
+token = request.headers.get('Authorization')
+if not token or not token.startswith('Bearer '):
+    return jsonify({"error": "Unauthorized"}), 401
+token = token[7:]  # Remove 'Bearer ' prefix
 
 # Rest of your code remains unchanged
 
