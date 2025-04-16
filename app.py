@@ -339,9 +339,6 @@ def download(current_user):
 
         elif report_type == "pdf":
             pdf_bytes = generate_pdf(raw_records)
-            if isinstance(pdf_bytes, bytearray):
-                pdf_bytes = bytes(pdf_bytes)  # Convert bytearray to bytes
-            
             response = make_response(pdf_bytes)
             response.headers["Content-Disposition"] = "attachment; filename=diabetes_records.pdf"
             response.headers["Content-type"] = "application/pdf"
@@ -349,7 +346,7 @@ def download(current_user):
 
     except Exception as e:
         app.logger.error(f"Report generation failed: {str(e)}")
-        return jsonify({"status": "error", "message": f"Report generation failed: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
     if not os.path.exists("reports"):
