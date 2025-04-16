@@ -339,12 +339,13 @@ def download(current_user):
 
         elif report_type == "pdf":
             pdf_bytes = generate_pdf(raw_records)
+            if isinstance(pdf_bytes, bytearray):
+                pdf_bytes = bytes(pdf_bytes)  # Convert bytearray to bytes
+            
             response = make_response(pdf_bytes)
-            response.headers["Content-Disposition"] = f"attachment; filename=diabetes_records.pdf"
+            response.headers["Content-Disposition"] = "attachment; filename=diabetes_records.pdf"
             response.headers["Content-type"] = "application/pdf"
             return response
-
-        return jsonify({"status": "error", "message": "Invalid report type"}), 400
 
     except Exception as e:
         app.logger.error(f"Report generation failed: {str(e)}")
