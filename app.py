@@ -20,17 +20,13 @@ app = Flask(__name__)
 # In your Flask app.py
 CORS(app, resources={
     r"/*": {
-        "origins": [
-            "https://ai-disease-prediction-frontend-production.up.railway.app",
-            "http://localhost:5051"  # For local dev
-        ],
+        "origins": ["https://your-frontend-url.up.railway.app"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Authorization", "Content-Type"],
         "supports_credentials": True
     }
 })
-token = request.headers.get('Authorization')
-if not token or not token.startswith('Bearer '):
-    return jsonify({"error": "Unauthorized"}), 401
-token = token[7:]  # Remove 'Bearer ' prefix
+
 
 # Rest of your code remains unchanged
 
@@ -249,11 +245,9 @@ def logs():
 
 @app.route("/all-records", methods=["GET"])
 def all_records():
-    token = request.args.get("token")
-    user = users_collection.find_one({"token": token})
-
-    if not user or user["role"] != "doctor":
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     records = list(predictions_collection.find(
         {},
@@ -263,12 +257,10 @@ def all_records():
     return jsonify({"status": "success", "records": records})
 
 @app.route("/admin-summary", methods=["GET"])
-def admin_summary():
-    token = request.args.get("token")
-    user = users_collection.find_one({"token": token})
-
-    if not user or user["role"] != "doctor":
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+def admin_summarry():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     total_users = users_collection.count_documents({})
     total_predictions = predictions_collection.count_documents({})
@@ -288,12 +280,9 @@ def admin_summary():
 
 @app.route("/download", methods=["GET"])
 def download():
-    token = request.args.get("token")
-    report_type = request.args.get("type", "csv")
-
-    user = users_collection.find_one({"token": token})
-    if not user or user["role"] != "doctor":
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
     try:
         # Define our expected output fields and defaults
