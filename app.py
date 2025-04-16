@@ -17,7 +17,7 @@ from suggestions import generate_suggestion
 
 app = Flask(__name__)
 # Enhanced CORS configuration to allow requests from the frontend
-CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["http://127.0.0.1:5051", "http://localhost:5051"]}})
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
 # Rest of your code remains unchanged
 
@@ -28,7 +28,7 @@ users_collection = db["users"]
 predictions_collection = db["predictions"]
 
 # Load trained model
-model = joblib.load("/home/scholar/Documents/DOCS/Projects101/Projects/Disease-Prediction-AI/diabetes_model.pkl")
+model = joblib.load("diabetes_model.pkl")  # Simplified path
 
 @app.route("/register", methods=["POST"])
 def register():
