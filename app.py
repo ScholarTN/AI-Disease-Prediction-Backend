@@ -18,14 +18,7 @@ from suggestions import generate_suggestion
 app = Flask(__name__)
 # Enhanced CORS configuration to allow requests from the frontend
 # In your Flask app.py
-CORS(app, resources={
-    r"/*": {
-        "origins": ["https://your-frontend-url.up.railway.app"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type"],
-        "supports_credentials": True
-    }
-})
+CORS(app, resources={r"/*": {"origins": ["https://ai-disease-prediction-frontend-production.up.railway.app"]}})
 
 
 # Rest of your code remains unchanged
